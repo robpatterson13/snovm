@@ -205,7 +205,8 @@ mod tests {
             Instruction::LoadC(1),
             Instruction::Add,
             Instruction::LoadC(1),
-            Instruction::Sub
+            Instruction::Sub,
+            Instruction::Halt
         ];
         let vm = VM::new(&insts);
         let result = vm.execute();
