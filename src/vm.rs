@@ -239,7 +239,7 @@ mod tests {
             assert_eq!(result, $result);
         };
 
-        ($($inst:expr),+ => $result:expr, --- with stack: $($snap:expr),+) => {
+        ($($inst:expr),+ => $result:expr; with stack dumps: $([$($snap_item:expr),*]),+) => {
             #[allow(unused)]
             {
                 let insts: Vec<Instruction> = vec![$($inst),+];
@@ -248,7 +248,7 @@ mod tests {
                 assert_eq!(result, $result);
                 let mut index = 0;
                 $(
-                    assert_eq!(*stack.get(index).unwrap(), $snap);
+                    assert_eq!(*stack.get(index).unwrap(), vec![$($snap_item),*]);
                     index += 1;
                 )*
             }
@@ -268,14 +268,13 @@ mod tests {
             Instruction::Sub,
             STACK_DUMP,
             Instruction::Halt
-            => 7,
+            => 7;
 
-            ---
-            with stack:
-            vec![7, 1],
-            vec![8],
-            vec![8, 1],
-            vec![7]
+            with stack dumps:
+            [7, 1],
+            [8],
+            [8, 1],
+            [7]
         );
     }
 }
