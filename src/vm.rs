@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[derive(Copy, Clone, Debug)]
 enum Instruction {
     LoadC(i64),
@@ -21,23 +23,33 @@ enum Instruction {
     Geq,
     Neg,
     Not,
+    Debug(DebugInstruction),
     Halt
 }
+
+#[derive(Copy, Clone, Debug)]
+enum DebugInstruction {
+    StackDump
+}
+
+const STACK_DUMP: Instruction = Instruction::Debug(DebugInstruction::StackDump);
 
 type IList = Vec<Instruction>;
 
 type ExecutionResult<R> = Result<R, ExecutionError>;
+type DebugResult<R> = Result<(R, Vec<Vec<R>>), ExecutionError>;
 type FinalExecutionResult = ExecutionResult<()>;
 
 struct VM<'a> {
     pc: usize,
     stack: Vec<i64>,
-    insts: &'a IList
+    insts: &'a IList,
+    debug_stack: Vec<Vec<i64>>
 }
 
 impl<'a> VM<'a> {
-    fn new(insts: &'a IList) -> Self {
-        Self { pc: 0, stack: Vec::new(), insts }
+    pub fn new(insts: &'a IList) -> Self {
+        Self { pc: 0, stack: Vec::new(), insts, debug_stack: Vec::new() }
     }
 }
 
@@ -48,16 +60,29 @@ enum ExecutionError {
 }
 
 impl VM<'_> {
-    fn execute(mut self) -> Result<i64, ExecutionError> {
+    pub fn execute(mut self) -> ExecutionResult<i64> {
+        self.dispatch()?;
+        self.top_or(ExecutionError::StackUnderflow)
+    }
+
+    fn execute_debug(mut self) -> DebugResult<i64> {
+        self.dispatch()?;
+        let result = self.top_or(ExecutionError::StackUnderflow)?;
+        let stack = self.debug_stack.clone();
+        Ok((result, stack))
+    }
+
+    #[inline(always)]
+    fn dispatch(&mut self) -> ExecutionResult<()> {
         loop {
             let op = self.fetch(self.pc);
             match op {
                 Instruction::LoadC(c)  => self.do_loadc(c),
+                Instruction::Pop       => self.do_pop()?,
                 Instruction::Load      => self.do_load()?,
                 Instruction::LoadA(i)  => self.do_loada(i)?,
                 Instruction::Store     => self.do_store()?,
                 Instruction::StoreA(i) => self.do_storea(i)?,
-                Instruction::Pop       => self.do_pop()?,
 
                 Instruction::Add => self.do_binop(|a, b| a + b)?,
                 Instruction::Sub => self.do_binop(|a, b| a - b)?,
@@ -76,11 +101,11 @@ impl VM<'_> {
                 Instruction::Not => self.do_unop(|a| !a)?,
                 Instruction::Neg => self.do_unop(|a| -a)?,
 
-                Instruction::Halt => break
+                Instruction::Debug(d) => self.do_debug(d),
+
+                Instruction::Halt => return Ok(()),
             };
         }
-
-        self.top_or(ExecutionError::StackUnderflow)
     }
 
     #[inline(always)]
@@ -192,24 +217,65 @@ impl VM<'_> {
         self.pc += 1;
         Ok(())
     }
+
+    #[inline(always)]
+    fn do_debug(&mut self, d: DebugInstruction) {
+        match d {
+            DebugInstruction::StackDump => self.debug_stack.push(self.stack.clone()),
+        };
+        self.pc += 1;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    macro_rules! test_vm {
+        ($($insts:ident),+ => $result:expr) => {
+            let insts: Vec<Instruction> = vec![$($inst),+];
+            let vm = VM::new(&$insts);
+            let (result, _) = vm.execute_debug().unwrap();
+            assert_eq!(result, $result);
+        };
+
+        ($($inst:expr),+ => $result:expr, --- with stack: $($snap:expr),+) => {
+            #[allow(unused)]
+            {
+                let insts: Vec<Instruction> = vec![$($inst),+];
+                let vm = VM::new(&insts);
+                let (result, stack) = vm.execute_debug().unwrap();
+                assert_eq!(result, $result);
+                let mut index = 0;
+                $(
+                    assert_eq!(*stack.get(index).unwrap(), $snap);
+                    index += 1;
+                )*
+            }
+        };
+    }
+
     #[test]
     fn eq_7() {
-        let insts = vec![
+        test_vm!(
             Instruction::LoadC(7),
             Instruction::LoadC(1),
+            STACK_DUMP,
             Instruction::Add,
+            STACK_DUMP,
             Instruction::LoadC(1),
+            STACK_DUMP,
             Instruction::Sub,
+            STACK_DUMP,
             Instruction::Halt
-        ];
-        let vm = VM::new(&insts);
-        let result = vm.execute();
-        assert_eq!(result, Ok(7));
+            => 7,
+
+            ---
+            with stack:
+            vec![7, 1],
+            vec![8],
+            vec![8, 1],
+            vec![7]
+        );
     }
 }
