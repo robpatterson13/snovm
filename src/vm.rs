@@ -65,6 +65,12 @@ macro_rules! binop {
     };
 }
 
+macro_rules! unop {
+    ($t:tt, $s:ident) => {
+        $s.do_unop(|a| $t(a))
+    };
+}
+
 impl VM<'_> {
     pub fn execute(mut self) -> ExecutionResult<i64> {
         self.dispatch()?;
@@ -104,8 +110,8 @@ impl VM<'_> {
                 Instruction::Gr  => binop!(>, self)?,
                 Instruction::Geq => binop!(>=, self)?,
 
-                Instruction::Not => self.do_unop(|a| !a)?,
-                Instruction::Neg => self.do_unop(|a| -a)?,
+                Instruction::Not => unop!(!, self)?,
+                Instruction::Neg => unop!(-, self)?,
 
                 Instruction::Debug(d) => self.do_debug(d),
 
@@ -300,6 +306,17 @@ mod tests {
             Instruction::Neq,
             Instruction::Halt
             => 0
+        );
+    }
+
+    #[test]
+    fn test_load() {
+        test_vm!(
+            Instruction::LoadC(10),
+            Instruction::LoadC(0),
+            Instruction::Load,
+            Instruction::Halt
+            => 10
         );
     }
 }
