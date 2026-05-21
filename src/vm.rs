@@ -59,6 +59,12 @@ enum ExecutionError {
     AddressDoesNotExist
 }
 
+macro_rules! binop {
+    ($t:tt, $s:ident) => {
+        $s.do_binop(|a, b| (a $t b) as i64)
+    };
+}
+
 impl VM<'_> {
     pub fn execute(mut self) -> ExecutionResult<i64> {
         self.dispatch()?;
@@ -84,19 +90,19 @@ impl VM<'_> {
                 Instruction::Store     => self.do_store()?,
                 Instruction::StoreA(i) => self.do_storea(i)?,
 
-                Instruction::Add => self.do_binop(|a, b| a + b)?,
-                Instruction::Sub => self.do_binop(|a, b| a - b)?,
-                Instruction::Mul => self.do_binop(|a, b| a * b)?,
-                Instruction::Div => self.do_binop(|a, b| a / b)?,
-                Instruction::Mod => self.do_binop(|a, b| a % b)?,
-                Instruction::And => self.do_binop(|a, b| a & b)?,
-                Instruction::Or  => self.do_binop(|a, b| a | b)?,
-                Instruction::Eq  => self.do_binop(|a, b| (a == b) as i64)?,
-                Instruction::Neq => self.do_binop(|a, b| (a != b) as i64)?,
-                Instruction::Le  => self.do_binop(|a, b| (a < b) as i64)?,
-                Instruction::Leq => self.do_binop(|a, b| (a <= b) as i64)?,
-                Instruction::Gr  => self.do_binop(|a, b| (a > b) as i64)?,
-                Instruction::Geq => self.do_binop(|a, b| (a >= b) as i64)?,
+                Instruction::Add => binop!(+, self)?,
+                Instruction::Sub => binop!(-, self)?,
+                Instruction::Mul => binop!(*, self)?,
+                Instruction::Div => binop!(/, self)?,
+                Instruction::Mod => binop!(%, self)?,
+                Instruction::And => binop!(&, self)?,
+                Instruction::Or  => binop!(|, self)?,
+                Instruction::Eq  => binop!(==, self)?,
+                Instruction::Neq => binop!(!=, self)?,
+                Instruction::Le  => binop!(<, self)?,
+                Instruction::Leq => binop!(<=, self)?,
+                Instruction::Gr  => binop!(>, self)?,
+                Instruction::Geq => binop!(>=, self)?,
 
                 Instruction::Not => self.do_unop(|a| !a)?,
                 Instruction::Neg => self.do_unop(|a| -a)?,
@@ -232,9 +238,9 @@ mod tests {
     use super::*;
 
     macro_rules! test_vm {
-        ($($insts:ident),+ => $result:expr) => {
-            let insts: Vec<Instruction> = vec![$($inst),+];
-            let vm = VM::new(&$insts);
+        ($($insts:expr),+ => $result:expr) => {
+            let i: Vec<Instruction> = vec![$($insts),+];
+            let vm = VM::new(&i);
             let (result, _) = vm.execute_debug().unwrap();
             assert_eq!(result, $result);
         };
@@ -275,6 +281,25 @@ mod tests {
             [8],
             [8, 1],
             [7]
+        );
+    }
+
+    #[test]
+    fn test_eq() {
+        test_vm!(
+            Instruction::LoadC(10),
+            Instruction::LoadC(10),
+            Instruction::Eq,
+            Instruction::Halt
+            => 1
+        );
+
+        test_vm!(
+            Instruction::LoadC(10),
+            Instruction::LoadC(10),
+            Instruction::Neq,
+            Instruction::Halt
+            => 0
         );
     }
 }
